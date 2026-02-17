@@ -4447,11 +4447,15 @@
 
         function saveActualProjects() {
             localStorage.setItem('actualProjects', JSON.stringify(actualProjects));
-            // Save to Google Sheets in background
-            fetch(GOOGLE_URL + '?action=save&data=' + encodeURIComponent(JSON.stringify(actualProjects)))
-                .then(r => r.json())
-                .then(r => { if(r.success) showCloudMsg('☁️ נשמר'); })
-                .catch(() => {});
+            // Save to Google Sheets via POST
+            fetch(GOOGLE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'save', data: actualProjects })
+            })
+            .then(r => r.json())
+            .then(r => { if(r.success) showCloudMsg('☁️ נשמר'); })
+            .catch(e => console.warn('Save error:', e));
         }
 
         function showCloudMsg(msg) {
