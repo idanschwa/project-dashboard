@@ -427,7 +427,6 @@
 
     <script>
         // Embedded project data - will be replaced with actual data
-        const GOOGLE_URL = "https://script.google.com/macros/s/AKfycbx93p1Z9ukZJpAHEFtrV7sKD1aLlFSY-23tAiDrdGda5j-MlvLGrzkvDqsqc2MNd6bZ/exec";
         const BASELINE_DATA = [
     {
         "project_manager": "מני",
@@ -4350,54 +4349,6 @@
         // Load projects data
         function loadProjects() {
             baselineProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
-            baselineProjects.forEach(p => {
-                if (!p.project_status) p.project_status = 'תכנון';
-                if (!p.contractor_invoices) p.contractor_invoices = {};
-                p.milestones.forEach(m => { if (!m.notes) m.notes = ''; });
-            });
-
-            // Load from localStorage immediately
-            const saved = localStorage.getItem('actualProjects');
-            if (saved) {
-                try { actualProjects = JSON.parse(saved); } 
-                catch(e) { actualProjects = JSON.parse(JSON.stringify(BASELINE_DATA)); }
-            } else {
-                actualProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
-            }
-            actualProjects.forEach(p => {
-                if (!p.project_status) p.project_status = 'תכנון';
-                if (!p.contractor_invoices) p.contractor_invoices = {};
-                if (!p.milestones) p.milestones = [];
-                p.milestones.forEach(m => { if (!m.notes) m.notes = ''; });
-            });
-            filteredProjects = [...actualProjects];
-            updateDashboard();
-            createManagerFilters();
-            renderProjects();
-
-            // Then sync from Google in background
-            fetch(GOOGLE_URL + '?action=load')
-                .then(r => r.json())
-                .then(result => {
-                    if (result.success && result.data && result.data.length > 0) {
-                        actualProjects = result.data;
-                        actualProjects.forEach(p => {
-                            if (!p.project_status) p.project_status = 'תכנון';
-                            if (!p.contractor_invoices) p.contractor_invoices = {};
-                            if (!p.milestones) p.milestones = [];
-                            p.milestones.forEach(m => { if (!m.notes) m.notes = ''; });
-                        });
-                        localStorage.setItem('actualProjects', JSON.stringify(actualProjects));
-                        filteredProjects = [...actualProjects];
-                        updateDashboard();
-                        createManagerFilters();
-                        renderProjects();
-                        showCloudMsg('☁️ מסונכרן');
-                    }
-                })
-                .catch(() => {});
-            
-            return; // async continues above
             
             // Add missing fields to baseline
             baselineProjects.forEach(project => {
@@ -4447,28 +4398,6 @@
 
         function saveActualProjects() {
             localStorage.setItem('actualProjects', JSON.stringify(actualProjects));
-            // Save to Google Sheets via POST
-            fetch(GOOGLE_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ action: 'save', data: actualProjects })
-            })
-            .then(r => r.json())
-            .then(r => { if(r.success) showCloudMsg('☁️ נשמר'); })
-            .catch(e => console.warn('Save error:', e));
-        }
-
-        function showCloudMsg(msg) {
-            let el = document.getElementById('cloudMsg');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'cloudMsg';
-                el.style.cssText = 'position:fixed;bottom:20px;left:20px;background:#10b981;color:white;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:opacity 0.5s;';
-                document.body.appendChild(el);
-            }
-            el.textContent = msg;
-            el.style.opacity = '1';
-            setTimeout(() => el.style.opacity = '0', 3000);
         }
 
         function updateDashboard() {
