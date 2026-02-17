@@ -7,19 +7,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Vardana, sans-serif;
-            overflow-x: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         .timeline-bar {
             position: relative;
             height: 32px;
             border-radius: 6px;
             transition: all 0.3s ease;
-        }
-        .timeline-wrapper {
-            position: relative;
-            padding: 6px 0;
             overflow: visible;
+        }
+        .timeline-bar-wrapper {
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
         }
         .timeline-bar:hover {
             transform: translateY(-2px);
@@ -31,7 +31,7 @@
             height: 24px;
             border-radius: 50%;
             top: 3px;
-            transform: translateX(-50%);
+            transform: translateX(50%); /* RTL */
             cursor: pointer;
             transition: all 0.2s ease;
             z-index: 10;
@@ -88,10 +88,10 @@
         .details-section {
             max-height: 0;
             overflow: hidden;
-            transition: max-height 0.5s ease;
+            transition: max-height 0.3s ease;
         }
         .details-section.expanded {
-            max-height: 5000px;
+            max-height: 1000px;
         }
         .details-table {
             width: 100%;
@@ -236,6 +236,11 @@
         }
         .comparison-container {
             position: relative;
+        }
+        .timeline-row {
+            position: relative;
+            overflow: hidden;
+            border-radius: 6px;
         }
         .delay-indicator {
             position: absolute;
@@ -422,7 +427,6 @@
 
     <script>
         // Embedded project data - will be replaced with actual data
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx93p1Z9ukZJpAHEFtrV7sKD1aLlFSY-23tAiDrdGda5j-MlvLGrzkvDqsqc2MNd6bZ/exec";
         const BASELINE_DATA = [
     {
         "project_manager": "מני",
@@ -4343,120 +4347,57 @@
         };
 
         // Load projects data
-        function ensureFields(projects) {
-            projects.forEach(function(p) {
-                if (!p.project_status) p.project_status = 'תכנון';
-                if (!p.contractor_invoices) p.contractor_invoices = {};
-                if (!p.milestones) p.milestones = [];
-                if (!p.project_name) p.project_name = 'פרויקט ללא שם';
-                if (!p.project_manager) p.project_manager = '';
-                p.milestones.forEach(function(m) { if (!m.notes) m.notes = ''; });
+        function loadProjects() {
+            baselineProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
+            
+            // Add missing fields to baseline
+            baselineProjects.forEach(project => {
+                if (!project.project_status) project.project_status = 'תכנון';
+                project.milestones.forEach(milestone => {
+                    if (!milestone.notes) milestone.notes = '';
+                });
             });
-            // Remove any projects without milestones array
-            return projects.filter(function(p) { return p.milestones && Array.isArray(p.milestones); });
-        }
-
-        function renderAll() {
+            
+            // Load actual projects from localStorage or use baseline
+            const savedData = localStorage.getItem('actualProjects');
+            if (savedData) {
+                try {
+                    actualProjects = JSON.parse(savedData);
+                    // Ensure all projects have required fields
+                    actualProjects.forEach(project => {
+                        if (!project.project_status) project.project_status = 'תכנון';
+                        project.milestones.forEach(milestone => {
+                            if (!milestone.notes) milestone.notes = '';
+                        });
+                    });
+                } catch (e) {
+                    actualProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
+                    actualProjects.forEach(project => {
+                        if (!project.project_status) project.project_status = 'תכנון';
+                        project.milestones.forEach(milestone => {
+                            if (!milestone.notes) milestone.notes = '';
+                        });
+                    });
+                }
+            } else {
+                actualProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
+                actualProjects.forEach(project => {
+                    if (!project.project_status) project.project_status = 'תכנון';
+                    project.milestones.forEach(milestone => {
+                        if (!milestone.notes) milestone.notes = '';
+                    });
+                });
+            }
+            
             filteredProjects = [...actualProjects];
+            
             updateDashboard();
             createManagerFilters();
             renderProjects();
         }
 
-        function loadProjects() {
-            // Setup baseline
-            baselineProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
-            ensureFields(baselineProjects);
-
-            // Step 1: Load from localStorage immediately (instant, no delay)
-            const savedData = localStorage.getItem('actualProjects');
-            if (savedData) {
-                try { actualProjects = JSON.parse(savedData); }
-                catch(e) { actualProjects = JSON.parse(JSON.stringify(BASELINE_DATA)); }
-            } else {
-                actualProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
-            }
-            actualProjects = ensureFields(actualProjects);
-            renderAll();
-
-            // Step 2: Try to load from Google via JSONP (works without CORS)
-            jsonpRequest(GOOGLE_SCRIPT_URL + '?action=load&callback=googleLoadCb');
-        }
-
         function saveActualProjects() {
             localStorage.setItem('actualProjects', JSON.stringify(actualProjects));
-            saveToGoogle();
-        }
-
-        // JSONP callbacks
-        window.googleLoadCb = function(result) {
-            if (result && result.success && result.data && result.data.length > 0) {
-                actualProjects = ensureFields(result.data);
-                localStorage.setItem('actualProjects', JSON.stringify(actualProjects));
-                renderAll();
-                showCloudIndicator('☁️ מסונכרן עם Google', '#10b981');
-            }
-        };
-
-        function jsonpRequest(url) {
-            const old = document.getElementById('googleScript');
-            if (old) old.remove();
-            const s = document.createElement('script');
-            s.id = 'googleScript';
-            s.src = url;
-            s.onerror = function() { s.remove(); };
-            document.head.appendChild(s);
-            setTimeout(function() { if (s.parentNode) s.remove(); }, 10000);
-        }
-
-        function saveToGoogle() {
-            try {
-                const jsonStr = JSON.stringify(actualProjects);
-                const chunkSize = 6000;
-                const chunks = [];
-                for (let i = 0; i < jsonStr.length; i += chunkSize) {
-                    chunks.push(encodeURIComponent(jsonStr.slice(i, i + chunkSize)));
-                }
-                sendChunkJsonp(chunks, 0, chunks.length);
-            } catch(e) {
-                console.warn('saveToGoogle error:', e);
-            }
-        }
-
-        function sendChunkJsonp(chunks, index, total) {
-            if (index >= chunks.length) {
-                showCloudIndicator('☁️ נשמר ב-Google', '#10b981');
-                return;
-            }
-            window._chunkCb = function(result) {
-                if (result && result.success) {
-                    sendChunkJsonp(chunks, index + 1, total);
-                }
-            };
-            const s = document.createElement('script');
-            s.src = GOOGLE_SCRIPT_URL +
-                '?callback=_chunkCb' +
-                '&action=chunk' +
-                '&index=' + index +
-                '&total=' + total +
-                '&data=' + chunks[index];
-            s.onerror = function() { s.remove(); };
-            document.head.appendChild(s);
-            setTimeout(function() { if (s.parentNode) s.remove(); }, 10000);
-        }
-
-        function showCloudIndicator(msg, color) {
-            let el = document.getElementById('cloudIndicator');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'cloudIndicator';
-                el.style.cssText = 'position:fixed;bottom:20px;left:20px;color:white;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:opacity 0.5s;';
-                document.body.appendChild(el);
-            }
-            el.style.background = color;
-            el.textContent = msg;
-            el.style.opacity = '1';
-            setTimeout(function() { el.style.opacity = '0'; }, 3000);
         }
 
         function updateDashboard() {
@@ -4629,9 +4570,10 @@
             let html = '';
 
             filteredProjects.forEach((project, index) => {
-                if (!project || !project.milestones) return; // safety check
+                if (!project || !project.milestones) return;
                 const actualIndex = actualProjects.indexOf(project);
                 const baselineProject = baselineProjects[actualIndex];
+                if (!baselineProject || !baselineProject.milestones) return;
                 const color = managerColors[project.project_manager] || '#667eea';
                 
                 const years = [...new Set(project.milestones.map(m => m.year))].sort();
@@ -4671,12 +4613,12 @@
                             <!-- Baseline Timeline -->
                             <div class="mb-2">
                                 <div class="timeline-label">תכניות עבודה (מקורית)</div>
-                                <div class="timeline-wrapper">
+                                <div class="timeline-bar-wrapper">
                                     <div class="timeline-bar" style="background: linear-gradient(90deg, ${color}30 0%, ${color}45 100%); opacity: 0.8;">
                                         ${baselineProject.milestones.map((m, mIdx) => {
                                             const monthIndex = monthsHebrew[m.month];
                                             if (monthIndex !== undefined) {
-                                                const position = ((monthIndex + 0.5) / 12) * 100;
+                                                const position = Math.min(96, Math.max(2, ((monthIndex + 0.5) / 12) * 100));
                                                 return `
                                                     <div class="milestone-marker" 
                                                          style="right: ${position}%; background: ${color}; opacity: 0.85; border: 2px solid white; width: 22px; height: 22px; top: 4px;"
@@ -4690,17 +4632,18 @@
                                         }).join('')}
                                     </div>
                                 </div>
+                                </div>
                             </div>
                             
                             <!-- Actual Timeline -->
                             <div>
                                 <div class="timeline-label">תכניות עבודה (נוכחית)</div>
-                                <div class="timeline-wrapper">
+                                <div class="timeline-bar-wrapper">
                                     <div class="timeline-bar" style="background: linear-gradient(90deg, ${color}20 0%, ${color}40 100%);">
                                         ${project.milestones.map((m, mIdx) => {
                                             const monthIndex = monthsHebrew[m.month];
                                             if (monthIndex !== undefined) {
-                                                const position = ((monthIndex + 0.5) / 12) * 100;
+                                                const position = Math.min(96, Math.max(2, ((monthIndex + 0.5) / 12) * 100));
                                                 const baselineMilestone = baselineProject.milestones[mIdx];
                                                 let statusClass = '';
                                                 if (m.completed) {
