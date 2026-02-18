@@ -427,6 +427,7 @@
 
     <script>
         // Embedded project data - will be replaced with actual data
+        const GOOGLE_URL = "https://script.google.com/macros/s/AKfycbx93p1Z9ukZJpAHEFtrV7sKD1aLlFSY-23tAiDrdGda5j-MlvLGrzkvDqsqc2MNd6bZ/exec";
         const BASELINE_DATA = [
     {
         "project_manager": "מני",
@@ -4347,8 +4348,72 @@
         };
 
         // Load projects data
+
+        function showCloudMsg(msg) {
+            let el = document.getElementById('cloudMsg');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'cloudMsg';
+                el.style.cssText = 'position:fixed;bottom:20px;left:20px;background:#10b981;color:white;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+                document.body.appendChild(el);
+            }
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 2500);
+        }
+
         function loadProjects() {
             baselineProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
+            baselineProjects.forEach(p => {
+                if (!p.project_status) p.project_status = 'תכנון';
+                if (!p.contractor_invoices) p.contractor_invoices = {};
+                p.milestones.forEach(m => { if (!m.notes) m.notes = ''; });
+            });
+
+            // Try localStorage first (instant load)
+            const saved = localStorage.getItem('actualProjects');
+            if (saved) {
+                try { 
+                    actualProjects = JSON.parse(saved);
+                    if (actualProjects.length > 1) {
+                        actualProjects.forEach(p => {
+                            if (!p.project_status) p.project_status = 'תכנון';
+                            if (!p.contractor_invoices) p.contractor_invoices = {};
+                            if (!p.milestones) p.milestones = [];
+                            p.milestones.forEach(m => { if (!m.notes) m.notes = ''; });
+                        });
+                        filteredProjects = [...actualProjects];
+                        updateDashboard();
+                        createManagerFilters();
+                        renderProjects();
+                    }
+                } catch(e) {}
+            }
+
+            // Then load from Google (sync in background)
+            fetch(GOOGLE_URL + '?action=load')
+                .then(r => r.json())
+                .then(result => {
+                    if (result.success && result.data && result.data.length > 1) {
+                        actualProjects = result.data;
+                        actualProjects.forEach(p => {
+                            if (!p.project_status) p.project_status = 'תכנון';
+                            if (!p.contractor_invoices) p.contractor_invoices = {};
+                            if (!p.milestones) p.milestones = [];
+                            p.milestones.forEach(m => { if (!m.notes) m.notes = ''; });
+                        });
+                        localStorage.setItem('actualProjects', JSON.stringify(actualProjects));
+                        filteredProjects = [...actualProjects];
+                        updateDashboard();
+                        createManagerFilters();
+                        renderProjects();
+                        showCloudMsg('☁️ ' + actualProjects.length + ' פרויקטים');
+                    }
+                })
+                .catch(() => {
+                    // Fallback to baseline if Google fails
+                    if (!actualProjects || actualProjects.length <= 1) {
+                        actualProjects = JSON.parse(JSON.stringify(BASELINE_DATA));
             
             // Add missing fields to baseline
             baselineProjects.forEach(project => {
@@ -4398,6 +4463,12 @@
 
         function saveActualProjects() {
             localStorage.setItem('actualProjects', JSON.stringify(actualProjects));
+            // Auto-save to Google Sheets
+            fetch(GOOGLE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'save', data: actualProjects })
+            }).catch(() => {});
         }
 
         function updateDashboard() {
